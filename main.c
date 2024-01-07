@@ -86,7 +86,7 @@ void toggleMode(struct input_event ev, int fd) {
 }
 
 void pressMode(struct input_event ev, int fd) {
-  if (ev.code == BTN_STYLUS) {
+  if (false && ev.code == BTN_STYLUS) {
       ev.code = BTN_TOOL_RUBBER; //value will follow the button, so we can reuse the message
       writeEvent(fd, ev);
     }
@@ -190,7 +190,7 @@ int main(int argc, char *argv[]) {
         const size_t ev_pen_size = sizeof(struct input_event);
         read(fd_pen, &ev_pen, ev_pen_size); //note: read pauses until there is data
 
-        if(doublePressHandler(ev_pen)) {
+        if(false && doublePressHandler(ev_pen)) {
           switch(doublePressAction) {
             case UNDO :
               printf("writing undo\n");
