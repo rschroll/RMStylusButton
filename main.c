@@ -12,6 +12,8 @@
 #define PEN_DEVICE      "/dev/input/event1"
 #define TOUCH_DEVICE    "/dev/input/event2"
 
+#define TOUCH_PAUSE_US  10000
+
 
 //const struct input_event tool_touch_off = { .type = EV_KEY, .code = BTN_TOUCH, .value = 0}; //these might be used in the future to improve press and hold mode
 //const struct input_event tool_pen_on = { .type = EV_KEY, .code = BTN_TOOL_PEN, .value = 1}; //used when pen approaches the screen
@@ -27,6 +29,56 @@ void writeEvent(int fd, struct input_event event)
   event.time = tv;
   //debug: printf("writing: seconds = %ld, usec= %ld, type = %d, code = %d, value = %d\n", event.time.tv_sec, event.time.tv_usec, event.type, event.code, event.value);
   write(fd, &event, sizeof(struct input_event));
+}
+
+void writeEventVals(int fd, unsigned short type, unsigned short code, signed int value) {
+    struct input_event event = (struct input_event) {.type=type, .code=code, .value=value};
+    writeEvent(fd, event);
+    //printf("%i\t%04x %04x %08x\n", fd, type, code, value);
+}
+
+void writeMultiTap(int fd_touch, int fd_pen, int n) {
+    // https://www.kernel.org/doc/html/latest/input/multi-touch-protocol.html#protocol-example-b
+    int tracking_id = 100,
+        x = WIDTH / 3, // - panelTouch[0],
+        dx = 200,
+        y = HEIGHT / 2;
+
+    if (n < 1)
+        return;
+
+    // Lift the pen away from the surface, to allow multitouch to be registered.
+    writeEventVals(fd_pen, EV_KEY, 0x0140, 0);
+    writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
+
+    // Grab the pen device to keep more inputs from undoing the above.
+    ioctl(fd_pen, EVIOCGRAB, 1);
+
+    // Make sure these events get processed before simulating the multitouch.
+    usleep(TOUCH_PAUSE_US);
+
+    // Write n touch events.
+    for (int i=0; i<n; i++) {
+        writeEventVals(fd_touch, EV_ABS, ABS_MT_SLOT, i);
+        writeEventVals(fd_touch, EV_ABS, ABS_MT_TRACKING_ID, tracking_id + i);
+        writeEventVals(fd_touch, EV_ABS, ABS_MT_POSITION_X, x + i*dx);
+        writeEventVals(fd_touch, EV_ABS, ABS_MT_POSITION_Y, y);
+    }
+    writeEventVals(fd_touch, EV_SYN, SYN_REPORT, 0);
+
+    // Write n touch release events.
+    for (int i=0; i<n; i++) {
+        writeEventVals(fd_touch, EV_ABS, ABS_MT_SLOT, i);
+        writeEventVals(fd_touch, EV_ABS, ABS_MT_TRACKING_ID, -1);
+    }
+    writeEventVals(fd_touch, EV_SYN, SYN_REPORT, 0);
+
+    // Release the pen input
+    ioctl(fd_pen, EVIOCGRAB, 0);
+
+    // Bring the pen back into proximity of the surface.
+    writeEventVals(fd_pen, EV_KEY, 0x0140, 1);
+    writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
 }
 
 void writeTapWithTouch(int fd, int location[2], bool left_handed) {
@@ -170,7 +222,7 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
       }
     /* Open Device: Touch */
-    fd_touch = open(TOUCH_DEVICE, O_WRONLY);
+    fd_touch = open(TOUCH_DEVICE, O_RDWR);
     if (fd_touch == -1) {
         fprintf(stderr, "%s is not a vaild device\n", PEN_DEVICE);
         exit(EXIT_FAILURE);
@@ -189,6 +241,11 @@ int main(int argc, char *argv[]) {
     for (;;) {
         const size_t ev_pen_size = sizeof(struct input_event);
         read(fd_pen, &ev_pen, ev_pen_size); //note: read pauses until there is data
+
+        if (ev_pen.code == BTN_STYLUS && ev_pen.value == 0) {
+          printf("Undo tap\n");
+          writeMultiTap(fd_touch, fd_pen, 2);
+        }
 
         if(false && doublePressHandler(ev_pen)) {
           switch(doublePressAction) {
