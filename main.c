@@ -83,25 +83,6 @@ void writeMultiTap(int fd_touch, int fd_pen, int n) {
     writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
 }
 
-void toggleMode(struct input_event ev, int fd) {
-  static int toggle = 0;
-  if (ev.code == BTN_STYLUS && ev.value == 1) { // change state of toggle on button press
-      toggle = !toggle;
-      printf("toggle: %d \n", toggle);
-    }
-  if (toggle)
-    if (ev.code == BTN_TOOL_PEN) { //when toggle is on, we write these events following the pen state
-        if (ev.value == 1) {
-          printf("writing eraser on\n");
-          writeEvent(fd, tool_rubber_on);
-          }
-        else {
-            printf("writing eraser off\n");
-            writeEvent(fd, tool_rubber_off);
-        }
-      }
-}
-
 void pressMode(struct input_event ev, int fd) {
   if (ev.code == BTN_STYLUS) {
       ev.code = BTN_TOOL_RUBBER; //value will follow the button, so we can reuse the message
@@ -120,6 +101,7 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
     int n_clicks = 0;
     bool primed = false;
     struct timeval last_click;
+    bool eraser_on = false;
 
     for (;;) {
         read(fd_pen, &ev_pen, ev_pen_size); //note: read pauses until there is data
@@ -144,14 +126,26 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
         } else if (primed && ev_pen.type == EV_SYN && ev_pen.code == SYN_REPORT &&
                    laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {
             printf("%ix click event detected\n", n_clicks);
-            if (n_clicks == 1 && toggle)
-                //toggleMode(ev_pen, fd_pen);
-                printf("toggle\n");
-            else if (n_clicks > 1)
+            if (n_clicks == 1 && toggle) {
+                eraser_on = !eraser_on;
+                printf("Writing eraser tool %d\n", eraser_on);
+                writeEventVals(fd_pen, EV_KEY, BTN_TOOL_RUBBER, eraser_on);
+                if (!eraser_on) {
+                    // Setting the rubber tool off isn't enough; the pen needs to be
+                    // moved away from the screen and then back.
+                    writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 0);
+                    writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 1);
+                }
+            } else if (n_clicks > 1) {
                 writeMultiTap(fd_touch, fd_pen, n_clicks);
-                //printf("multi\n");
+            }
             n_clicks = 0;
             primed = false;
+        } else if (eraser_on && ev_pen.type == EV_KEY && ev_pen.code == BTN_TOOL_PEN) {
+            // When the pen moves away from the screen, it resets the rubber tool.  This
+            // explicitly turns it off, and more importantly turns it back on.
+            printf("Writing eraser tool %d\n", ev_pen.value);
+            writeEventVals(fd_pen, EV_KEY, BTN_TOOL_RUBBER, ev_pen.value);
         }
     }
 }
