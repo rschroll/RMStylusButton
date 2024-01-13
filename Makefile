@@ -3,7 +3,7 @@ rmdevice?=remarkable.local
 
 .PHONY: clean
 
-${binary}: main.c screenlocations.h
+${binary}: main.c
 	${CC} -O2 -o ${binary} main.c
 
 deploy: ${binary}
