@@ -12,7 +12,8 @@
 #define PEN_DEVICE      "/dev/input/event1"
 #define TOUCH_DEVICE    "/dev/input/event2"
 
-#define TOUCH_PAUSE_US  10000
+// Times in seconds
+#define TOUCH_PAUSE   0.55
 #define PRESS_TIMEOUT 0.5
 
 
@@ -56,7 +57,7 @@ void writeMultiTap(int fd_touch, int fd_pen, int n) {
     ioctl(fd_pen, EVIOCGRAB, 1);
 
     // Make sure these events get processed before simulating the multitouch.
-    usleep(TOUCH_PAUSE_US);
+    usleep((int)(TOUCH_PAUSE * 1000000));
 
     // Write n touch events.
     for (int i=0; i<n; i++) {
