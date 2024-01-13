@@ -13,6 +13,7 @@
 #define TOUCH_DEVICE    "/dev/input/event2"
 
 #define TOUCH_PAUSE_US  10000
+#define PRESS_TIMEOUT 0.5
 
 
 //const struct input_event tool_touch_off = { .type = EV_KEY, .code = BTN_TOUCH, .value = 0}; //these might be used in the future to improve press and hold mode
@@ -81,43 +82,6 @@ void writeMultiTap(int fd_touch, int fd_pen, int n) {
     writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
 }
 
-void writeTapWithTouch(int fd, int location[2], bool left_handed) {
-  struct input_event event;
-
-  //this is the minimum (probably) seqeunce of events that must be sent to tap the screen in a location.
-  event = (struct input_event) {.type = EV_ABS, .code = ABS_MT_SLOT, .value = 0x7FFFFFFF}; //Use max signed int slot
-  //printf("Writing ABS_MT_SLOT: %d\n", event.value);
-  writeEvent(fd, event);
-
-  event = (struct input_event) {.type = EV_ABS, .code = ABS_MT_TRACKING_ID, .value = time(NULL)};
-  //printf("Writing Tracking ID: %d\n", event.value);
-  writeEvent(fd, event);
-
-  int x = location[0];
-  if (left_handed) {
-      x = WIDTH - x;
-  }
-  event = (struct input_event) {.type = EV_ABS, .code = ABS_MT_POSITION_X, .value = x};
-  //printf("Writing Touch X: %d\n", event.value);
-  writeEvent(fd, event);
-
-  event = (struct input_event) {.type = EV_ABS, .code = ABS_MT_POSITION_Y, .value = location[1]};
-  //printf("Writing Touch Y: %d\n", event.value);
-  writeEvent(fd, event);
-
-  event = (struct input_event) {.type = EV_SYN, .code = SYN_REPORT, .value = 1};
-  //printf("Writing SYN Report\n");
-  writeEvent(fd, event);
-
-  event = (struct input_event) {.type = EV_ABS, .code = ABS_MT_TRACKING_ID, .value = -1};
-  //printf("Writing Tracking ID: -1\n");
-  writeEvent(fd, event);
-
-  event = (struct input_event) {.type = EV_SYN, .code = SYN_REPORT, .value = 1};
-  //printf("Writing SYN Report\n");
-  writeEvent(fd, event);
-}
-
 void toggleMode(struct input_event ev, int fd) {
   static int toggle = 0;
   if (ev.code == BTN_STYLUS && ev.value == 1) { // change state of toggle on button press
@@ -138,26 +102,57 @@ void toggleMode(struct input_event ev, int fd) {
 }
 
 void pressMode(struct input_event ev, int fd) {
-  if (false && ev.code == BTN_STYLUS) {
+  if (ev.code == BTN_STYLUS) {
       ev.code = BTN_TOOL_RUBBER; //value will follow the button, so we can reuse the message
       writeEvent(fd, ev);
     }
 }
 
-bool doublePressHandler(struct input_event ev) { //returns true if a double press has happened
-  static struct timeval prevTime;
-  const double maxDoublePressTime = .5; //500ms seems to be the standard double press time
-  double elapsedTime = (ev.time.tv_sec + ev.time.tv_usec/1000000.0) - (prevTime.tv_sec + prevTime.tv_usec/1000000.0);
-  if (ev.code == BTN_STYLUS && ev.value == 1) {
-      //printf("Current Time: %f | ", ev.time.tv_sec + ev.time.tv_usec/1000000.0);
-      //printf("Prev Time: %f |", prevTime.tv_sec + prevTime.tv_usec/1000000.0);
-      //printf("Elapsed Time: %f\n", elapsedTime);
-      if (elapsedTime <= maxDoublePressTime) {
-        return true;
-      }
-      prevTime = ev.time;
+bool laterThan(struct timeval now, struct timeval then, double delta) {
+    double elapsed = (now.tv_sec - then.tv_sec) + (now.tv_usec / 1000000.0 - then.tv_usec / 1000000.0);
+    return elapsed > delta;
+}
+
+void mainloop(int fd_pen, int fd_touch, bool toggle) {
+    struct input_event ev_pen;
+    const size_t ev_pen_size = sizeof(struct input_event);
+    int n_clicks = 0;
+    bool primed = false;
+    struct timeval last_click;
+
+    for (;;) {
+        read(fd_pen, &ev_pen, ev_pen_size); //note: read pauses until there is data
+
+        if (ev_pen.type == EV_KEY && ev_pen.code == BTN_STYLUS) {
+            if (!toggle)
+                pressMode(ev_pen, fd_pen);
+            if (ev_pen.value == 1) {  // press
+                if (n_clicks != 0 && laterThan(ev_pen.time, last_click, PRESS_TIMEOUT))  // Outstanding event?
+                    n_clicks = 0;
+                n_clicks += 1;
+                last_click = ev_pen.time;
+                primed = false;
+            } else if (ev_pen.value == 0) {  // release
+                if (!laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {
+                    primed = true;
+                } else {
+                    n_clicks = 0;
+                    primed = false;
+                }
+            }
+        } else if (primed && ev_pen.type == EV_SYN && ev_pen.code == SYN_REPORT &&
+                   laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {
+            printf("%ix click event detected\n", n_clicks);
+            if (n_clicks == 1 && toggle)
+                //toggleMode(ev_pen, fd_pen);
+                printf("toggle\n");
+            else if (n_clicks > 1)
+                writeMultiTap(fd_touch, fd_pen, n_clicks);
+                //printf("multi\n");
+            n_clicks = 0;
+            primed = false;
+        }
     }
-  return false;
 }
 
 int main(int argc, char *argv[]) {
@@ -238,45 +233,6 @@ int main(int argc, char *argv[]) {
     printf("2. device file = %s\n", TOUCH_DEVICE);
     printf("   device name = %s\n", name);
 
-    for (;;) {
-        const size_t ev_pen_size = sizeof(struct input_event);
-        read(fd_pen, &ev_pen, ev_pen_size); //note: read pauses until there is data
-
-        if (ev_pen.code == BTN_STYLUS && ev_pen.value == 0) {
-          printf("Undo tap\n");
-          writeMultiTap(fd_touch, fd_pen, 2);
-        }
-
-        if(false && doublePressHandler(ev_pen)) {
-          switch(doublePressAction) {
-            case UNDO :
-              printf("writing undo\n");
-              writeTapWithTouch(fd_touch, undoTouch, left_handed);
-              writeTapWithTouch(fd_touch, panelTouch, left_handed);
-              writeTapWithTouch(fd_touch, undoTouch, left_handed);
-              writeTapWithTouch(fd_touch, panelTouch, left_handed);  //doing it like this ensures that the panel returns to it's starting state
-              break;
-            case REDO :
-              printf("writing redo\n");
-              writeTapWithTouch(fd_touch, redoTouch, left_handed);
-              writeTapWithTouch(fd_touch, panelTouch, left_handed);
-              writeTapWithTouch(fd_touch, redoTouch, left_handed);
-              writeTapWithTouch(fd_touch, panelTouch, left_handed);
-              break;
-            }
-          }
-
-        switch(mode) {
-          case TOGGLE_MODE :
-            toggleMode(ev_pen, fd_pen);
-            break;
-          case PRESS_MODE :
-            pressMode(ev_pen, fd_pen);
-            break;
-          default :
-            printf("Somehow a mode wasn't set? Exiting...\n");
-            exit(EXIT_FAILURE);
-          }
-      }
+    mainloop(fd_pen, fd_touch, mode == TOGGLE_MODE);
     return EXIT_SUCCESS;
 }
