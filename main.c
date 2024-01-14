@@ -15,7 +15,7 @@
 
 // Times in seconds
 #define TOUCH_PAUSE   0.55
-#define PRESS_TIMEOUT 0.5
+#define PRESS_TIMEOUT 0.2
 
 
 static int verbose = 0;
@@ -101,6 +101,7 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
             } else if (ev_pen.value == 0) {  // release
                 if (!laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {
                     primed = true;
+                    last_click = ev_pen.time;
                 } else {
                     n_clicks = 0;
                     primed = false;
