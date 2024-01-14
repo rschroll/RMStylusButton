@@ -18,10 +18,14 @@
 #define PRESS_TIMEOUT 0.5
 
 
+static int verbose = 0;
+#define Vprintf verbose && printf
+#define VVprintf (verbose >= 2) && printf
+
 void writeEventVals(int fd, unsigned short type, unsigned short code, signed int value) {
     struct input_event event = (struct input_event) {.type=type, .code=code, .value=value};
     gettimeofday(&event.time, NULL);
-    //debug: printf("writing: seconds = %ld, usec= %ld, type = %d, code = %d, value = %d\n", event.time.tv_sec, event.time.tv_usec, event.type, event.code, event.value);
+    VVprintf("writing: seconds = %ld, usec= %ld, type = %d, code = %d, value = %d\n", event.time.tv_sec, event.time.tv_usec, event.type, event.code, event.value);
     write(fd, &event, sizeof(struct input_event));
 }
 
@@ -104,10 +108,10 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
             }
         } else if (primed && ev_pen.type == EV_SYN && ev_pen.code == SYN_REPORT &&
                    laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {
-            printf("%ix click event detected\n", n_clicks);
+            Vprintf("%ix click event detected\n", n_clicks);
             if (n_clicks == 1 && toggle) {
                 eraser_on = !eraser_on;
-                printf("Writing eraser tool %d\n", eraser_on);
+                Vprintf("Writing eraser tool %d\n", eraser_on);
                 writeEventVals(fd_pen, EV_KEY, BTN_TOOL_RUBBER, eraser_on);
                 if (!eraser_on) {
                     // Setting the rubber tool off isn't enough; the pen needs to be
@@ -123,7 +127,7 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
         } else if (eraser_on && ev_pen.type == EV_KEY && ev_pen.code == BTN_TOOL_PEN) {
             // When the pen moves away from the screen, it resets the rubber tool.  This
             // explicitly turns it off, and more importantly turns it back on.
-            printf("Writing eraser tool %d\n", ev_pen.value);
+            Vprintf("Writing eraser tool %d\n", ev_pen.value);
             writeEventVals(fd_pen, EV_KEY, BTN_TOOL_RUBBER, ev_pen.value);
         }
     }
@@ -132,19 +136,21 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
 int main(int argc, char *argv[]) {
     bool toggle_mode = false;
     int fd_pen, fd_touch;
-    char name[256] = "Unknown";
 
-    printf("RemarkableLamyEraser 1.2\n");
     //check our input args
     for(int i = 1; i < argc; i++) {
         if (!strncmp(argv[i], "--toggle", 8)) {
-            printf("MODE: TOGGLE\n");
             toggle_mode = true;
+        } else if (!strncmp(argv[i], "--verbose", 9) || !strncmp(argv[i], "-v", 2)) {
+            verbose += 1;
         } else {
             printf("Unknown argument %s\nExiting...\n", argv[i]);
             exit(EXIT_FAILURE);
         }
     }
+    Vprintf("RemarkableLamyEraser 1.2\n");
+    if (toggle_mode)
+        Vprintf("Mode: toggle\n");
 
     /* Open Device: Pen */
     fd_pen = open(PEN_DEVICE, O_RDWR);
@@ -160,13 +166,16 @@ int main(int argc, char *argv[]) {
     }
 
     /* Print Device Name */
-    ioctl(fd_pen, EVIOCGNAME(sizeof(name)), name);
-    printf("Using Devices:\n");
-    printf("1. device file = %s\n", PEN_DEVICE);
-    printf("   device name = %s\n", name);
-    ioctl(fd_touch, EVIOCGNAME(sizeof(name)), name);
-    printf("2. device file = %s\n", TOUCH_DEVICE);
-    printf("   device name = %s\n", name);
+    if (verbose) {
+        char name[256] = "Unknown";
+        ioctl(fd_pen, EVIOCGNAME(sizeof(name)), name);
+        printf("Using Devices:\n");
+        printf("1. device file = %s\n", PEN_DEVICE);
+        printf("   device name = %s\n", name);
+        ioctl(fd_touch, EVIOCGNAME(sizeof(name)), name);
+        printf("2. device file = %s\n", TOUCH_DEVICE);
+        printf("   device name = %s\n", name);
+    }
 
     mainloop(fd_pen, fd_touch, toggle_mode);
     return EXIT_SUCCESS;
