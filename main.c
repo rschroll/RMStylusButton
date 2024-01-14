@@ -29,25 +29,44 @@ void writeEventVals(int fd, unsigned short type, unsigned short code, signed int
     write(fd, &event, sizeof(struct input_event));
 }
 
-void writeMultiTap(int fd_touch, int fd_pen, int n) {
-    // https://www.kernel.org/doc/html/latest/input/multi-touch-protocol.html#protocol-example-b
-    int tracking_id = 100,
-        x = WIDTH / 3, // - panelTouch[0],
-        dx = 200,
-        y = HEIGHT / 2;
-
-    if (n < 1)
-        return;
-
+void grabPen(int fd_pen) {
     // Lift the pen away from the surface, to allow multitouch to be registered.
     writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 0);
     writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
 
     // Grab the pen device to keep more inputs from undoing the above.
     ioctl(fd_pen, EVIOCGRAB, 1);
+}
+
+void ungrabPen(int fd_pen) {
+    // Release the pen input
+    ioctl(fd_pen, EVIOCGRAB, 0);
+
+    // Bring the pen back into proximity of the surface.
+    writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 1);
+    writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
+}
+
+void writeMultiTap(int fd_touch, int fd_pen, int n, struct timeval grab_start) {
+    // https://www.kernel.org/doc/html/latest/input/multi-touch-protocol.html#protocol-example-b
+    int tracking_id = 100,
+        x = WIDTH / 3, // - panelTouch[0],
+        dx = 200,
+        y = HEIGHT / 2,
+        grab_delta,
+        wait;
+    struct timeval now;
+
+    if (n < 1)
+        return;
 
     // Make sure these events get processed before simulating the multitouch.
-    usleep((int)(TOUCH_PAUSE * 1000000));
+    gettimeofday(&now, NULL);
+    grab_delta = (now.tv_sec - grab_start.tv_sec) * 1000000 + now.tv_usec - grab_start.tv_usec;
+    wait = (int)(TOUCH_PAUSE * 1000000) - grab_delta;
+    Vprintf("Need to wait for %d us\n", wait);
+    if (wait > 0)
+        usleep(wait);
 
     // Write n touch events.
     for (int i=0; i<n; i++) {
@@ -64,13 +83,6 @@ void writeMultiTap(int fd_touch, int fd_pen, int n) {
         writeEventVals(fd_touch, EV_ABS, ABS_MT_TRACKING_ID, -1);
     }
     writeEventVals(fd_touch, EV_SYN, SYN_REPORT, 0);
-
-    // Release the pen input
-    ioctl(fd_pen, EVIOCGRAB, 0);
-
-    // Bring the pen back into proximity of the surface.
-    writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 1);
-    writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
 }
 
 bool laterThan(struct timeval now, struct timeval then, double delta) {
@@ -83,8 +95,10 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
     const size_t ev_pen_size = sizeof(struct input_event);
     int n_clicks = 0;
     bool primed = false;
-    struct timeval last_click;
+    struct timeval last_click, grab_start;
     bool eraser_on = false;
+
+    grab_start.tv_sec = 0;
 
     for (;;) {
         read(fd_pen, &ev_pen, ev_pen_size); //note: read pauses until there is data
@@ -93,11 +107,22 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
             if (!toggle)
                 writeEventVals(fd_pen, EV_KEY, BTN_TOOL_RUBBER, ev_pen.value);
             if (ev_pen.value == 1) {  // press
-                if (n_clicks != 0 && laterThan(ev_pen.time, last_click, PRESS_TIMEOUT))  // Outstanding event?
+                if (n_clicks != 0 && laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {  // Outstanding event?
                     n_clicks = 0;
+                    if (grab_start.tv_sec != 0) {
+                        ungrabPen(fd_pen);
+                        grab_start.tv_sec = 0;
+                    }
+                }
                 n_clicks += 1;
                 last_click = ev_pen.time;
                 primed = false;
+                if (n_clicks == 2){
+                    // We are entering multi-click territory.  We'll grab the pen input
+                    // so the timeout until we can simulate multitouch can start.
+                    grabPen(fd_pen);
+                    grab_start = ev_pen.time;
+                }
             } else if (ev_pen.value == 0) {  // release
                 if (!laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {
                     primed = true;
@@ -105,6 +130,10 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
                 } else {
                     n_clicks = 0;
                     primed = false;
+                    if (grab_start.tv_sec != 0) {
+                        ungrabPen(fd_pen);
+                        grab_start.tv_sec = 0;
+                    }
                 }
             }
         } else if (primed && ev_pen.type == EV_SYN && ev_pen.code == SYN_REPORT &&
@@ -121,7 +150,9 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
                     writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 1);
                 }
             } else if (n_clicks > 1) {
-                writeMultiTap(fd_touch, fd_pen, n_clicks);
+                writeMultiTap(fd_touch, fd_pen, n_clicks, grab_start);
+                ungrabPen(fd_pen);
+                grab_start.tv_sec = 0;
             }
             n_clicks = 0;
             primed = false;
