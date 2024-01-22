@@ -9,14 +9,10 @@
 #include <linux/uinput.h>
 #include <time.h>
 
-#define WIDTH  1404
-#define HEIGHT 1872
-
 #define PEN_DEVICE      "/dev/input/event1"
-#define TOUCH_DEVICE    "/dev/input/event2"
+#define UINPUT_DEVICE   "/dev/uinput"
 
 // Times in seconds
-#define TOUCH_PAUSE   0.55
 #define PRESS_TIMEOUT 0.2
 
 
@@ -66,7 +62,6 @@ void writeUndoRedo(int fd_keyboard, bool redo) {
     }
     writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTCTRL, 0);
     writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
-
 }
 
 int createKeyboardDevice() {
@@ -78,7 +73,7 @@ int createKeyboardDevice() {
     };
 
     // Open the uinput device
-    fd_key_emulator = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    fd_key_emulator = open(UINPUT_DEVICE, O_WRONLY | O_NONBLOCK);
     if (fd_key_emulator < 0) {
         printf("error in open : %s\n", strerror(errno));
         return -1;
@@ -115,7 +110,7 @@ bool laterThan(struct timeval now, struct timeval then, double delta) {
     return elapsed > delta;
 }
 
-void mainloop(int fd_pen, int fd_touch, int fd_keyboard, bool toggle) {
+void mainloop(int fd_pen, int fd_keyboard, bool toggle) {
     struct input_event ev_pen;
     const size_t ev_pen_size = sizeof(struct input_event);
     int n_clicks = 0;
@@ -192,7 +187,7 @@ void mainloop(int fd_pen, int fd_touch, int fd_keyboard, bool toggle) {
 
 int main(int argc, char *argv[]) {
     bool toggle_mode = false;
-    int fd_pen, fd_touch, fd_keyboard;
+    int fd_pen, fd_keyboard;
 
     //check our input args
     for(int i = 1; i < argc; i++) {
@@ -215,12 +210,6 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "%s is not a vaild device\n", PEN_DEVICE);
         exit(EXIT_FAILURE);
     }
-    /* Open Device: Touch */
-    fd_touch = open(TOUCH_DEVICE, O_RDWR);
-    if (fd_touch == -1) {
-        fprintf(stderr, "%s is not a vaild device\n", PEN_DEVICE);
-        exit(EXIT_FAILURE);
-    }
     /* Create Keyboard */
     fd_keyboard = createKeyboardDevice();
     if (fd_keyboard == -1) {
@@ -235,11 +224,11 @@ int main(int argc, char *argv[]) {
         printf("Using Devices:\n");
         printf("1. device file = %s\n", PEN_DEVICE);
         printf("   device name = %s\n", name);
-        ioctl(fd_touch, EVIOCGNAME(sizeof(name)), name);
-        printf("2. device file = %s\n", TOUCH_DEVICE);
+        ioctl(fd_keyboard, EVIOCGNAME(sizeof(name)), name);
+        printf("2. device file = %s\n", UINPUT_DEVICE);
         printf("   device name = %s\n", name);
     }
 
-    mainloop(fd_pen, fd_touch, fd_keyboard, toggle_mode);
+    mainloop(fd_pen, fd_keyboard, toggle_mode);
     return EXIT_SUCCESS;
 }
