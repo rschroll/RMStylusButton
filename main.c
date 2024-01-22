@@ -81,7 +81,6 @@ int createKeyboardDevice() {
 
     // Enable all of the events we will need
     if (ioctl(fd_key_emulator, UI_SET_EVBIT, EV_KEY)
-        || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_A)
         || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_Z)
         || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTSHIFT)
         || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTCTRL)
