@@ -27,39 +27,14 @@ void writeEventVals(int fd, unsigned short type, unsigned short code, signed int
     write(fd, &event, sizeof(struct input_event));
 }
 
-void grabPen(int fd_pen) {
-    // Lift the pen away from the surface, to allow multitouch to be registered.
-    writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 0);
-    writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
-
-    // Grab the pen device to keep more inputs from undoing the above.
-    ioctl(fd_pen, EVIOCGRAB, 1);
-}
-
-void ungrabPen(int fd_pen) {
-    // Release the pen input
-    ioctl(fd_pen, EVIOCGRAB, 0);
-
-    // Bring the pen back into proximity of the surface.
-    writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 1);
-    writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
-}
-
 void writeUndoRedo(int fd_keyboard, bool redo) {
+    int key_code = redo ? KEY_Y : KEY_Z;
     writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
     writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTCTRL, 1);
-    if (redo) {
-        writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTSHIFT, 1);
-        writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
-    }
-    writeEventVals(fd_keyboard, EV_KEY, KEY_Z, 1);
+    writeEventVals(fd_keyboard, EV_KEY, key_code, 1);
     writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
-    writeEventVals(fd_keyboard, EV_KEY, KEY_Z, 0);
+    writeEventVals(fd_keyboard, EV_KEY, key_code, 0);
     writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
-    if (redo) {
-        writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTSHIFT, 0);
-        writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
-    }
     writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTCTRL, 0);
     writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
 }
@@ -81,8 +56,8 @@ int createKeyboardDevice() {
 
     // Enable all of the events we will need
     if (ioctl(fd_key_emulator, UI_SET_EVBIT, EV_KEY)
+        || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_Y)
         || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_Z)
-        || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTSHIFT)
         || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTCTRL)
         || ioctl(fd_key_emulator, UI_SET_EVBIT, EV_SYN)) {
         fprintf(stderr, "Error in ioctl sets: %s\n", strerror(errno));
@@ -114,10 +89,8 @@ void mainloop(int fd_pen, int fd_keyboard, bool toggle) {
     const size_t ev_pen_size = sizeof(struct input_event);
     int n_clicks = 0;
     bool primed = false;
-    struct timeval last_click, grab_start;
+    struct timeval last_click;
     bool eraser_on = false;
-
-    grab_start.tv_sec = 0;
 
     for (;;) {
         read(fd_pen, &ev_pen, ev_pen_size); //note: read pauses until there is data
@@ -128,20 +101,10 @@ void mainloop(int fd_pen, int fd_keyboard, bool toggle) {
             if (ev_pen.value == 1) {  // press
                 if (n_clicks != 0 && laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {  // Outstanding event?
                     n_clicks = 0;
-                    if (grab_start.tv_sec != 0) {
-                        ungrabPen(fd_pen);
-                        grab_start.tv_sec = 0;
-                    }
                 }
                 n_clicks += 1;
                 last_click = ev_pen.time;
                 primed = false;
-                if (n_clicks == 2){
-                    // We are entering multi-click territory.  We'll grab the pen input
-                    // so there's some time before triggering a keyboard event.
-                    grabPen(fd_pen);
-                    grab_start = ev_pen.time;
-                }
             } else if (ev_pen.value == 0) {  // release
                 if (!laterThan(ev_pen.time, last_click, PRESS_TIMEOUT)) {
                     primed = true;
@@ -149,10 +112,6 @@ void mainloop(int fd_pen, int fd_keyboard, bool toggle) {
                 } else {
                     n_clicks = 0;
                     primed = false;
-                    if (grab_start.tv_sec != 0) {
-                        ungrabPen(fd_pen);
-                        grab_start.tv_sec = 0;
-                    }
                 }
             }
         } else if (primed && ev_pen.type == EV_SYN && ev_pen.code == SYN_REPORT &&
@@ -170,8 +129,6 @@ void mainloop(int fd_pen, int fd_keyboard, bool toggle) {
                 }
             } else if (n_clicks > 1) {
                 writeUndoRedo(fd_keyboard, n_clicks > 2);
-                ungrabPen(fd_pen);
-                grab_start.tv_sec = 0;
             }
             n_clicks = 0;
             primed = false;
