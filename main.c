@@ -75,7 +75,7 @@ int createKeyboardDevice() {
     // Open the uinput device
     fd_key_emulator = open(UINPUT_DEVICE, O_WRONLY | O_NONBLOCK);
     if (fd_key_emulator < 0) {
-        printf("error in open : %s\n", strerror(errno));
+        fprintf(stderr, "Error in opening uinput: %s\n", strerror(errno));
         return -1;
     }
 
@@ -86,19 +86,19 @@ int createKeyboardDevice() {
         || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTSHIFT)
         || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTCTRL)
         || ioctl(fd_key_emulator, UI_SET_EVBIT, EV_SYN)) {
-        printf("Error in ioctl sets: %s\n", strerror(errno));
+        fprintf(stderr, "Error in ioctl sets: %s\n", strerror(errno));
         return -1;
     }
 
     // Write the uinput_user_dev structure into uinput file descriptor
     if (write(fd_key_emulator, &dev_fake_keyboard, sizeof(struct uinput_user_dev)) < 0) {
-        printf("Error in write(): uinput_user_dev struct into uinput file descriptor: %s\n", strerror(errno));
+        fprintf(stderr, "Error in write(): uinput_user_dev struct into uinput file descriptor: %s\n", strerror(errno));
         return -1;
     }
 
     // Create the device via an IOCTL call
     if (ioctl(fd_key_emulator, UI_DEV_CREATE)) {
-        printf("Error in ioctl : UI_DEV_CREATE : %s\n", strerror(errno));
+        fprintf(stderr, "Error in ioctl : UI_DEV_CREATE : %s\n", strerror(errno));
         return -1;
     }
 
@@ -139,7 +139,7 @@ void mainloop(int fd_pen, int fd_keyboard, bool toggle) {
                 primed = false;
                 if (n_clicks == 2){
                     // We are entering multi-click territory.  We'll grab the pen input
-                    // so the timeout until we can simulate multitouch can start.
+                    // so there's some time before triggering a keyboard event.
                     grabPen(fd_pen);
                     grab_start = ev_pen.time;
                 }
