@@ -29,8 +29,8 @@ void writeEventVals(int fd, unsigned short type, unsigned short code, signed int
 
 void writeUndoRedo(int fd_keyboard, bool redo) {
     int key_code = redo ? KEY_Y : KEY_Z;
-    writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
     writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTCTRL, 1);
+    writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
     writeEventVals(fd_keyboard, EV_KEY, key_code, 1);
     writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
     writeEventVals(fd_keyboard, EV_KEY, key_code, 0);
