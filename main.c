@@ -4,7 +4,9 @@
 #include <stdbool.h>
 #include <string.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <linux/input.h>
+#include <linux/uinput.h>
 #include <time.h>
 
 #define WIDTH  1404
@@ -47,42 +49,65 @@ void ungrabPen(int fd_pen) {
     writeEventVals(fd_pen, EV_SYN, SYN_REPORT, 0);
 }
 
-void writeMultiTap(int fd_touch, int fd_pen, int n, struct timeval grab_start) {
-    // https://www.kernel.org/doc/html/latest/input/multi-touch-protocol.html#protocol-example-b
-    int tracking_id = 100,
-        x = WIDTH / 3, // - panelTouch[0],
-        dx = 200,
-        y = HEIGHT / 2,
-        grab_delta,
-        wait;
-    struct timeval now;
-
-    if (n < 1)
-        return;
-
-    // Make sure these events get processed before simulating the multitouch.
-    gettimeofday(&now, NULL);
-    grab_delta = (now.tv_sec - grab_start.tv_sec) * 1000000 + now.tv_usec - grab_start.tv_usec;
-    wait = (int)(TOUCH_PAUSE * 1000000) - grab_delta;
-    Vprintf("Need to wait for %d us\n", wait);
-    if (wait > 0)
-        usleep(wait);
-
-    // Write n touch events.
-    for (int i=0; i<n; i++) {
-        writeEventVals(fd_touch, EV_ABS, ABS_MT_SLOT, i);
-        writeEventVals(fd_touch, EV_ABS, ABS_MT_TRACKING_ID, tracking_id + i);
-        writeEventVals(fd_touch, EV_ABS, ABS_MT_POSITION_X, x + i*dx);
-        writeEventVals(fd_touch, EV_ABS, ABS_MT_POSITION_Y, y);
+void writeUndoRedo(int fd_keyboard, bool redo) {
+    writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
+    writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTCTRL, 1);
+    if (redo) {
+        writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTSHIFT, 1);
+        writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
     }
-    writeEventVals(fd_touch, EV_SYN, SYN_REPORT, 0);
-
-    // Write n touch release events.
-    for (int i=0; i<n; i++) {
-        writeEventVals(fd_touch, EV_ABS, ABS_MT_SLOT, i);
-        writeEventVals(fd_touch, EV_ABS, ABS_MT_TRACKING_ID, -1);
+    writeEventVals(fd_keyboard, EV_KEY, KEY_Z, 1);
+    writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
+    writeEventVals(fd_keyboard, EV_KEY, KEY_Z, 0);
+    writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
+    if (redo) {
+        writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTSHIFT, 0);
+        writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
     }
-    writeEventVals(fd_touch, EV_SYN, SYN_REPORT, 0);
+    writeEventVals(fd_keyboard, EV_KEY, KEY_LEFTCTRL, 0);
+    writeEventVals(fd_keyboard, EV_SYN, SYN_REPORT, 0);
+
+}
+
+int createKeyboardDevice() {
+    // https://stackoverflow.com/questions/40676172/how-to-generate-key-strokes-events-with-the-input-subsystem
+    int fd_key_emulator;
+    struct uinput_user_dev dev_fake_keyboard = {
+        .name = "kb-emulator",
+        .id = {.bustype = BUS_USB, .vendor = 0x01, .product = 0x01, .version = 1}
+    };
+
+    // Open the uinput device
+    fd_key_emulator = open("/dev/uinput", O_WRONLY | O_NONBLOCK);
+    if (fd_key_emulator < 0) {
+        printf("error in open : %s\n", strerror(errno));
+        return -1;
+    }
+
+    // Enable all of the events we will need
+    if (ioctl(fd_key_emulator, UI_SET_EVBIT, EV_KEY)
+        || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_A)
+        || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_Z)
+        || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTSHIFT)
+        || ioctl(fd_key_emulator, UI_SET_KEYBIT, KEY_LEFTCTRL)
+        || ioctl(fd_key_emulator, UI_SET_EVBIT, EV_SYN)) {
+        printf("Error in ioctl sets: %s\n", strerror(errno));
+        return -1;
+    }
+
+    // Write the uinput_user_dev structure into uinput file descriptor
+    if (write(fd_key_emulator, &dev_fake_keyboard, sizeof(struct uinput_user_dev)) < 0) {
+        printf("Error in write(): uinput_user_dev struct into uinput file descriptor: %s\n", strerror(errno));
+        return -1;
+    }
+
+    // Create the device via an IOCTL call
+    if (ioctl(fd_key_emulator, UI_DEV_CREATE)) {
+        printf("Error in ioctl : UI_DEV_CREATE : %s\n", strerror(errno));
+        return -1;
+    }
+
+    return fd_key_emulator;
 }
 
 bool laterThan(struct timeval now, struct timeval then, double delta) {
@@ -90,7 +115,7 @@ bool laterThan(struct timeval now, struct timeval then, double delta) {
     return elapsed > delta;
 }
 
-void mainloop(int fd_pen, int fd_touch, bool toggle) {
+void mainloop(int fd_pen, int fd_touch, int fd_keyboard, bool toggle) {
     struct input_event ev_pen;
     const size_t ev_pen_size = sizeof(struct input_event);
     int n_clicks = 0;
@@ -150,7 +175,7 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
                     writeEventVals(fd_pen, EV_KEY, BTN_TOOL_PEN, 1);
                 }
             } else if (n_clicks > 1) {
-                writeMultiTap(fd_touch, fd_pen, n_clicks, grab_start);
+                writeUndoRedo(fd_keyboard, n_clicks > 2);
                 ungrabPen(fd_pen);
                 grab_start.tv_sec = 0;
             }
@@ -167,7 +192,7 @@ void mainloop(int fd_pen, int fd_touch, bool toggle) {
 
 int main(int argc, char *argv[]) {
     bool toggle_mode = false;
-    int fd_pen, fd_touch;
+    int fd_pen, fd_touch, fd_keyboard;
 
     //check our input args
     for(int i = 1; i < argc; i++) {
@@ -196,6 +221,12 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "%s is not a vaild device\n", PEN_DEVICE);
         exit(EXIT_FAILURE);
     }
+    /* Create Keyboard */
+    fd_keyboard = createKeyboardDevice();
+    if (fd_keyboard == -1) {
+        fprintf(stderr, "Unable to create keyboard\n");
+        exit(EXIT_FAILURE);
+    }
 
     /* Print Device Name */
     if (verbose) {
@@ -209,6 +240,6 @@ int main(int argc, char *argv[]) {
         printf("   device name = %s\n", name);
     }
 
-    mainloop(fd_pen, fd_touch, toggle_mode);
+    mainloop(fd_pen, fd_touch, fd_keyboard, toggle_mode);
     return EXIT_SUCCESS;
 }
