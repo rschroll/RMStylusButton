@@ -1,4 +1,4 @@
-# RemarkableLamyEraser
+# RMStylusButton
 Standalone tool that turns the button on the Lamy Pen into an eraser on the reMarkable.
 
 
@@ -7,43 +7,34 @@ Also confirmed to work with these other styli:
  * Kindle Scribe Pen
  * Samsung S6 S Pen
  * Wacom One Pen CP91300B2Z
- 
+
 *As an alternative, consider using [this](https://github.com/ddvk/remarkable-stylus). (If you're already using ddvk-hacks, I'd defintely reccomend this route. This tool is for people who are looking for a less invasive option, and prefer the unaltered look of the reMarkable interface.)*
 
 The tool will definitely break when the reMarkable updates. When that happens, just reinstall!
 # Install Instructions
-Make sure your reMarkable is connected to the internet and then run the following command:
-```shell
-sh -c "$(wget --no-check-certificate https://raw.githubusercontent.com/isaacwisdom/RemarkableLamyEraser/v1/LamyInstall.sh -O-)"
-```
-Need more help? Check [here](https://www.joshualowcock.com/guide/how-to-install-the-lamy-al-star-pen-button-eraser-hack-on-the-remarkable-2/).
 
 # Uninstall Instrucions
-Make sure your reMarkable is connected to the internet and then run the following command:
-```shell
-sh -c "$(wget --no-check-certificate https://raw.githubusercontent.com/isaacwisdom/RemarkableLamyEraser/v1/LamyUninstall.sh -O-)"
-```
 
 
-# Usage 
+# Usage
 Press and hold to erase, release to use as a normal pen. Double click the button to undo. Note that at the moment, double pressing to undo only works for portrait orientation documents.
 
-Further customization can be done by adding arguments to ExecStart line of the LamyEraser.service file. This can be opened with `nano /lib/systemd/system/LamyEraser.service`.
-The supported arguments are:  
-`--press`   Press and hold to erase, release to use as a normal pen. *This is the default behavior.*  
-`--toggle`  Press the button to erase, press the button again to swtich back to a normal pen.  
-`--double-press undo` Double click the button to undo. *This is the default behavior.*  
-`--double-press redo` Double click the button to redo.  
-`--left-handed` Use this option if you are using left handed mode.  
-For example, this line would use the toggle mode and redo on a double click:  
-`ExecStart=RemarkableLamyEraser --toggle --double-press redo`
+Further customization can be done by adding arguments to ExecStart line of the RMStylusButton.service file. This can be opened with `nano /lib/systemd/system/RMStylusButton.service`.
+The supported arguments are:
+`--press`   Press and hold to erase, release to use as a normal pen. *This is the default behavior.*
+`--toggle`  Press the button to erase, press the button again to swtich back to a normal pen.
+`--double-press undo` Double click the button to undo. *This is the default behavior.*
+`--double-press redo` Double click the button to redo.
+`--left-handed` Use this option if you are using left handed mode.
+For example, this line would use the toggle mode and redo on a double click:
+`ExecStart=RMStylusButton --toggle --double-press redo`
 
 
 To apply your config, run these commands:
 ``` Shell
-systemctl stop LamyEraser.service
+systemctl stop RMStylusButton.service
 systemctl daemon-reload
-systemctl start LamyEraser.service
+systemctl start RMStylusButton.service
 ```
 # How it works
 When you press the button on the Lamy Pen, an input event with code BTN_TOOL_RUBBER is sent into dev/input/event1. Essentially, this tricks the reMarkable into

@@ -1,4 +1,4 @@
-binary=RemarkableLamyEraser/RemarkableLamyEraser
+binary=RMStylusButton/RMStylusButton
 rmdevice?=remarkable.local
 
 .PHONY: clean

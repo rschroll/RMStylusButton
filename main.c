@@ -156,7 +156,7 @@ int main(int argc, char *argv[]) {
             exit(EXIT_FAILURE);
         }
     }
-    Vprintf("RemarkableLamyEraser 1.2\n");
+    Vprintf("RMStylusButton 3.0-dev\n");
     if (toggle_mode)
         Vprintf("Mode: toggle\n");
 
