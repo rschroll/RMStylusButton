@@ -152,8 +152,7 @@ int main(int argc, char *argv[]) {
         } else if (!strncmp(argv[i], "--verbose", 9) || !strncmp(argv[i], "-v", 2)) {
             verbose += 1;
         } else {
-            printf("Unknown argument %s\nExiting...\n", argv[i]);
-            exit(EXIT_FAILURE);
+            fprintf(stderr, "Unknown argument %s\n", argv[i]);
         }
     }
     Vprintf("RMStylusButton 3.0-dev\n");
