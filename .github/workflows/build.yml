@@ -1,0 +1,51 @@
+name: build
+
+on: [push]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install toolchain
+        run: |
+          wget https://storage.googleapis.com/remarkable-codex-toolchain/remarkable-platform-image-4.0.117-rm2-public-x86_64-toolchain.sh -O /tmp/toolchain.sh
+          sh /tmp/toolchain.sh -y
+      - name: Build tarball
+        run: |
+          source /opt/codex/rm2/4.0.117/environment-setup-cortexa7hf-neon-remarkable-linux-gnueabi
+          make RMStylusButton.tar.gz
+      - name: Archive tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: RMStylusButton-tarball
+          path: RMStylusButton.tar.gz
+      - name: Create release
+        id: create_release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Version ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+      - name: Tarball hash
+        id: tarball_hash
+        if: steps.create_release.outcome == 'success'
+        run: sha256sum RMStylusButton.tar.gz
+      - name: Upload release tarball
+        id: upload_release
+        if: steps.tarball_hash.outcome == 'success'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: RMStylusButton.tar.gz
+          asset_name: RMStylusButton.tar.gz
+          asset_content_type: application/gzip
