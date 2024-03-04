@@ -1,3 +1,9 @@
+/*
+ * Copyright 2023-2024 Robert Schroll
+ * Copyright 2021-2023 Isaac Wisdom
+ * Released under the GPLv3
+ * See LICENSE for details
+ */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>

@@ -1,58 +1,102 @@
 # RMStylusButton
-Standalone tool that turns the button on the Lamy Pen into an eraser on the reMarkable.
 
-
-
-Also confirmed to work with these other styli:
+RMStylusButton is a small stand-alone program that runs on the reMarkable 2 and converts button presses into actions.  It should work with any EMR (Wacom-compatible) stylus.  It has been tested with the [Lamy ALstar EMR stylus](https://www.lamy.com/en/digital-writing/classic-meets-smartness/#alstaremr), and similar tools have reported success with:
  * Kindle Scribe Pen
  * Samsung S6 S Pen
  * Wacom One Pen CP91300B2Z
 
-*As an alternative, consider using [this](https://github.com/ddvk/remarkable-stylus). (If you're already using ddvk-hacks, I'd defintely reccomend this route. This tool is for people who are looking for a less invasive option, and prefer the unaltered look of the reMarkable interface.)*
+## Installation
 
-The tool will definitely break when the reMarkable updates. When that happens, just reinstall!
-# Install Instructions
+Installation of RMStylusButton requires an SSH connection to your reMarkable device.   This [reMarkable guide page](https://remarkable.guide/guide/access/ssh.html) can get you started.
 
-# Uninstall Instrucions
-
-
-# Usage
-Press and hold to erase, release to use as a normal pen. Double click the button to undo. Note that at the moment, double pressing to undo only works for portrait orientation documents.
-
-Further customization can be done by adding arguments to ExecStart line of the RMStylusButton.service file. This can be opened with `nano /lib/systemd/system/RMStylusButton.service`.
-The supported arguments are:
-`--press`   Press and hold to erase, release to use as a normal pen. *This is the default behavior.*
-`--toggle`  Press the button to erase, press the button again to swtich back to a normal pen.
-`--double-press undo` Double click the button to undo. *This is the default behavior.*
-`--double-press redo` Double click the button to redo.
-`--left-handed` Use this option if you are using left handed mode.
-For example, this line would use the toggle mode and redo on a double click:
-`ExecStart=RMStylusButton --toggle --double-press redo`
-
-
-To apply your config, run these commands:
-``` Shell
-systemctl stop RMStylusButton.service
-systemctl daemon-reload
-systemctl start RMStylusButton.service
+To download RMStylusButton, SSH into your device and run
 ```
-# How it works
-When you press the button on the Lamy Pen, an input event with code BTN_TOOL_RUBBER is sent into dev/input/event1. Essentially, this tricks the reMarkable into
-thinking you are using the eraser side of the Marker Plus.
+wget https://github.com/rschroll/RMStylusButton/releases/download/v3.0/RMStylusButton.tar.gz -O- | tar xz
+```
+This will download and unpack several files to a newly-created `RMStylusButton` directory.
 
-# How to build
+To test it out, run
+```
+./RMStylusButton/RMStylusButton
+```
+(See below for usage details.)  Use `Ctrl-C` to stop the program.
 
-* Download the latest toolchain for your device from <https://remarkablewiki.com/devel/toolchain> (e.g. `codex-x86_64-cortexa9hf-neon-rm10x-toolchain-3.1.15.sh`)
-* run that file to install the toolchain (e.g. `sudo sh codex-x86_64-cortexa9hf-neon-rm10x-toolchain-3.1.15.sh`)
-* source the printed environment file (e.g. `source /opt/codex/rm11x/3.1.15/environment-setup-cortexa7hf-neon-remarkable-linux-gnueabi`)
-* compile `main.c` using the `CC` environment variable (e.g. `$CC -O2 main.c`)
-    * if there is an error like `no such file or directory`, copy the command and execute it directly instead of using `$CC`, e.g. `arm-remarkable-linux-gnueabi-gcc  -mfpu=neon -mfloat-abi=hard -mcpu=cortex-a7 --sysroot=/opt/codex/rm11x/3.1.15/sysroots/cortexa7hf-neon-remarkable-linux-gnueabi -O2 main.c`)
+To install RMStylusButton and have it start automatically, run
+```
+./RMStylusButton/manage.sh install
+```
+Your stylus button should work immediately, as well as after restarts.
 
-# TODO:
-- [x] RM1 support (testers needed)
-- [x] Nice install script
-- [ ] toltec package
-- [x] config file (as opposed to current command line argument system) -__V2__
-- [x] flexible triggers (such as "click", "press and hold", "double click", "double click and hold", etc.) -__V2__
-- [x] freely assignable actions (as listed below, able to assign to any trigger above) -__V2__
+### reMarkable upgrades
 
+When you install an updated version of the reMarkable software, it will erase the changes that cause RMStylusButton to start automatically.  The files downloaded above should still be present, so just SSH in and again run
+```
+./RMStylusButton/manage.sh install
+```
+
+### Uninstalling
+
+If you don't want RMStylusButton active anymore, SSH into your device and run
+```
+./RMStylusButton/manage.sh uninstall
+```
+If you desire, you can also delete the downloaded files:
+```
+rm -r RMStylusButton
+```
+
+<details>
+<summary><b>A note about security</b></summary>
+
+Downloading and running binaries from random people on the internet is not a great idea, security-wise.  For openness, the binary is built on GitHub Actions.  You can checkout the [workflow](https://github.com/rschroll/RMStylusButton/blob/main/.github/workflows/build.yml) and examine the [build logs](https://github.com/rschroll/RMStylusButton/actions).  A `sha256sum` of the tarball is computed in the build process.  Use this to verify that the files you downloaded was the same as was built in the GitHub Action.  On either your reMarkable or your computer, run
+```
+sha256sum RMStylusButton.tar.gz
+```
+The output should be the same as in the GitHub Actions log for the version that you have downloaded.
+</details>
+
+## Usage
+
+Press and hold the button on your stylus to erase.  Release the button to switch back to whatever pen you had selected.
+
+Double-click the button to undo the most recent action.  Triple-click the button to redo that action.
+
+### Configuration
+
+RMStylusButton can be configured by options passed to the binary or to the `manage.sh install` command.  Valid options are
+
+<table><tr>
+<td><code>--toggle</code></td>
+<td>Single presses of the button toggle between erase mode and pen mode.</td>
+</tr></table>
+
+## Development
+
+To build RMStylusButton for the reMarkable, you need the [reMarkable toolchain](https://remarkable.guide/devel/toolchains.html).  I've been using the [official 4.0.117 release for the reMarkable 2](https://storage.googleapis.com/remarkable-codex-toolchain/remarkable-platform-image-4.0.117-rm2-public-x86_64-toolchain.sh).  The toolchain is intended for Linux machines, but I know people have gotten it to run in Docker.
+
+This file is a self-extracting shell script, which unpacks, by default to `/opt/codex`.  You may need to run the script as root.
+
+You will need to `source` the environment-setup file that got installed with the toolchain to get everything set up for cross-compilation.  Then, simply running `make` should build the RMStylusButton binary.  `make RMStylusButton.tar.gz` will assemble a tarball with the binary and the `manage.sh` script.
+
+To help with development, the `make deploy` target attempts to copy the tarball over to the reMarkable device.  It assumes that it can be reached at `remarkable.local`.  If that's not the case, set the `rmdevice` environmental variable with the right host name or IP address.
+
+### How it works
+
+Stylus events appear in `/dev/input/event1` on the reMarkable 2.  RMStylusButton watches this event stream for button presses.  When it sees events indicating that erasing should happen, it injects events corresponding to the eraser button.
+
+Undo and redo actions are triggered by creating a uinput keyboard device and injecting `Ctrl-Z` and `Ctrl-Y` events.
+
+## Alternatives
+
+Other tools provide similar capabilities to RMStylusButton, but with different features and mechanisms.  Here are the ones I know about.
+
+- [RemarkableLamyEraser](https://github.com/isaacwisdom/RemarkableLamyEraser) was the starting point for this project.  This project [has been paused](https://github.com/isaacwisdom/RemarkableLamyEraser/issues/70) by the developer.
+- [slotThe's fork](https://github.com/slotThe/RemarkableLamyEraser) continues the work towards version 2 of RemarkableLamyEraser.  This features a configuration system to allow many different events to be triggered by a wide variety of button click patterns.  These events are triggered by simulating touch events on the relevant UI elements on the tablet screen.  This makes it sensitive to whether the device is in left-handed mode or landscape mode.  It is also vulnerable to changes to the UI in new versions of the reMarkable software.
+- [remarkable-stylus](https://github.com/ddvk/remarkable-stylus) provides similar capabilites for users of the [remarkable-hacks](https://github.com/ddvk/remarkable-hacks) modified UI.
+
+## Copyright
+
+Copyright 2023-2024 Robert Schroll
+Copyright 2021-2023 Isaac Wisdom
+
+RMStylusButton is released under the GPLv3.  See LICENSE for details.
