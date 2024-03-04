@@ -97,6 +97,7 @@ Other tools provide similar capabilities to RMStylusButton, but with different f
 ## Copyright
 
 Copyright 2023-2024 Robert Schroll
+<br/>
 Copyright 2021-2023 Isaac Wisdom
 
 RMStylusButton is released under the GPLv3.  See LICENSE for details.

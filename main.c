@@ -161,7 +161,7 @@ int main(int argc, char *argv[]) {
             fprintf(stderr, "Unknown argument %s\n", argv[i]);
         }
     }
-    Vprintf("RMStylusButton 3.0-dev\n");
+    Vprintf("RMStylusButton 3.0\n");
     if (toggle_mode)
         Vprintf("Mode: toggle\n");
 
