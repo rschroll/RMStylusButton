@@ -1,9 +1,12 @@
 # RMStylusButton
 
-RMStylusButton is a small stand-alone program that runs on the reMarkable 2 and converts button presses into actions.  It should work with any EMR (Wacom-compatible) stylus.  It has been tested with the [Lamy ALstar EMR stylus](https://www.lamy.com/en/digital-writing/classic-meets-smartness/#alstaremr), and similar tools have reported success with:
+RMStylusButton is a small stand-alone program that runs on the reMarkable 2.  It detects stylus button presses to switch to the eraser tool and trigger undo and redo actions.
+
+It should work with any EMR (Wacom-compatible) stylus.  It has been tested with the [Lamy ALstar EMR stylus](https://www.lamy.com/en/digital-writing/classic-meets-smartness/#alstaremr), and similar tools have reported success with:
  * Kindle Scribe Pen
  * Samsung S6 S Pen
  * Wacom One Pen CP91300B2Z
+ * iFlytec T1 4096
 
 ## Installation
 
