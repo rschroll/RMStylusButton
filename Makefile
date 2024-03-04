@@ -1,4 +1,5 @@
 binary=RMStylusButton/RMStylusButton
+tarball=RMStylusButton.tar.gz
 rmdevice?=remarkable.local
 
 .PHONY: clean
@@ -6,8 +7,11 @@ rmdevice?=remarkable.local
 ${binary}: main.c
 	${CC} -O2 -o ${binary} main.c
 
-deploy: ${binary}
-	scp ${binary} root@${rmdevice}:${binary}
+${tarball}: ${binary} RMStylusButton/manage.sh
+	tar czf ${tarball} RMStylusButton/
+
+deploy: ${tarball}
+	scp ${tarball} root@${rmdevice}:${tarball}
 
 clean:
-	rm ${binary}
+	rm -f ${binary} ${tarball}
