@@ -16,7 +16,7 @@ jobs:
           sh /tmp/toolchain.sh -y
       - name: Build tarball
         run: |
-          source /opt/codex/rm2/3.1.15/environment-setup-cortexa7hf-neon-remarkable-linux-gnueabi
+          source /opt/codex/rm11x/3.1.15/environment-setup-cortexa7hf-neon-remarkable-linux-gnueabi
           make RMStylusButton.tar.gz
       - name: Archive tarball
         uses: actions/upload-artifact@v4
