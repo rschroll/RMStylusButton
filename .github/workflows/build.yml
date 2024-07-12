@@ -12,11 +12,11 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install toolchain
         run: |
-          wget https://storage.googleapis.com/remarkable-codex-toolchain/remarkable-platform-image-4.0.117-rm2-public-x86_64-toolchain.sh -O /tmp/toolchain.sh
+          wget https://storage.googleapis.com/remarkable-codex-toolchain/codex-x86_64-cortexa7hf-neon-rm11x-toolchain-3.1.15.sh -O /tmp/toolchain.sh
           sh /tmp/toolchain.sh -y
       - name: Build tarball
         run: |
-          source /opt/codex/rm2/4.0.117/environment-setup-cortexa7hf-neon-remarkable-linux-gnueabi
+          source /opt/codex/rm2/3.1.15/environment-setup-cortexa7hf-neon-remarkable-linux-gnueabi
           make RMStylusButton.tar.gz
       - name: Archive tarball
         uses: actions/upload-artifact@v4
